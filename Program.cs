@@ -1,4 +1,9 @@
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+
 using Microsoft.Extensions.Primitives;
+using System.Runtime.CompilerServices;
+using CS397.Trace;
 
 public class HelloMessage
 {
@@ -7,17 +12,25 @@ public class HelloMessage
 
 class Program
 {
-    private static async Task HelloWorldDelegate(HttpContext context){
+    const string serviceName = "monitored-docker-web-service";
+    const string serviceVersion = "1.0.0";
+
+    private readonly Tracer _tracer;
+
+    public Program(){
+        _tracer = TracerProvider.Default.GetTracer(serviceName);
+    }
+    private async Task HelloWorldDelegate(HttpContext context){
         Console.WriteLine("Hello Called");
         await context.Response.WriteAsync("Hello World!");
     }
 
-    private static async Task GoodbyeDelegate(HttpContext context){
+    private async Task GoodbyeDelegate(HttpContext context){
         Console.WriteLine("Goodbye Called");
         await context.Response.WriteAsync("Goodbye World!");
     }
 
-    private static async Task HelloJsonDelegate(HttpContext context){
+    private async Task HelloJsonDelegate(HttpContext context){
         HttpRequest request = context.Request;
 
         string echostring = "Hello, World!";
@@ -33,13 +46,25 @@ class Program
     }
 
     static void Main(String[] args){
-        var builder = WebApplication.CreateBuilder(args);
-        var app = builder.Build();
+        WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
-        app.MapGet("/", HelloWorldDelegate);
-        app.MapGet("/hello", HelloWorldDelegate);
-        app.MapGet("/goodbye", GoodbyeDelegate);
-        app.MapGet("/hellojson", HelloJsonDelegate);
+        builder.Services.AddOpenTelemetry().WithTracing(tcb =>{
+            tcb
+            .AddSource(serviceName)
+            .SetResourceBuilder(
+                ResourceBuilder.CreateDefault()
+                    .AddService(serviceName: serviceName, serviceVersion: serviceVersion))
+            .AddAspNetCoreInstrumentation()
+            .AddJsonConsoleExporter();
+        });
+
+        Program instance = new Program();
+        WebApplication app = builder.Build();
+
+        app.MapGet("/", instance.HelloWorldDelegate);
+        app.MapGet("/hello", instance.HelloWorldDelegate);
+        app.MapGet("/goodbye", instance.GoodbyeDelegate);
+        app.MapGet("/hellojson", instance.HelloJsonDelegate);
 
         app.Run();
     }
