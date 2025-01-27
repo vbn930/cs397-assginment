@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Primitives;
+
 public class HelloMessage
 {
     public string Message { get; set; } = string.Empty;
